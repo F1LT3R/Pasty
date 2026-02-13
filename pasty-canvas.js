@@ -155,7 +155,12 @@ class PastyCanvas extends HTMLElement {
   }
 
   _setupStateListeners() {
-    this._stateChangedHandler = () => this.renderSVG();
+    this._stateChangedHandler = () => {
+      // Skip re-renders triggered by state-changed during active transforms or drags;
+      // those code paths call renderSVG() explicitly after updating state.
+      if (this._transformMode || this._dragLayerId || this._isPanning) return;
+      this.renderSVG();
+    };
     this._zoomResetHandler = () => this._resetZoom();
     on('state-changed', this._stateChangedHandler);
     on('layer-selected', this._stateChangedHandler);
@@ -200,6 +205,7 @@ class PastyCanvas extends HTMLElement {
       img.setAttribute('y', String(layer.y));
       img.setAttribute('width', String(layer.width));
       img.setAttribute('height', String(layer.height));
+      img.setAttribute('preserveAspectRatio', 'none');
       g.appendChild(img);
 
       if (layer.id === selectedId) {
@@ -314,17 +320,17 @@ class PastyCanvas extends HTMLElement {
 
   _onMouseDown(e) {
     if (this._spaceDown) return;
-    const layerId = e.target.closest('[data-layer-id]')?.getAttribute('data-layer-id');
-    if (!layerId) return;
-    const layer = getLayers().find((l) => l.id === layerId);
-    if (layer?.locked) return;
 
-    selectLayer(layerId);
-
-    // Alt held = transform mode (scale or rotate)
+    // Alt held = transform mode (scale or rotate) on the currently selected layer
+    // This works from anywhere on the canvas — no need to click exactly on the layer
     if (e.altKey) {
       e.preventDefault();
-      this._transformLayerId = layerId;
+      const selectedId = getSelectedLayerId();
+      if (!selectedId) return;
+      const layer = getLayers().find((l) => l.id === selectedId);
+      if (!layer || layer.locked) return;
+
+      this._transformLayerId = selectedId;
       this._transformStartX = e.clientX;
       this._transformStartY = e.clientY;
       this._layerStartW = layer.width;
@@ -343,6 +349,13 @@ class PastyCanvas extends HTMLElement {
       }
       return;
     }
+
+    const layerId = e.target.closest('[data-layer-id]')?.getAttribute('data-layer-id');
+    if (!layerId) return;
+    const layer = getLayers().find((l) => l.id === layerId);
+    if (layer?.locked) return;
+
+    selectLayer(layerId);
 
     // Normal drag (move)
     const pt = this._clientToSvg(e.clientX, e.clientY);

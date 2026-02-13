@@ -45,6 +45,19 @@ class PastyApp extends HTMLElement {
 
         pasty-canvas {
           flex: 1;
+          min-width: 0;
+        }
+
+        .resize-handle {
+          width: 4px;
+          cursor: col-resize;
+          background: transparent;
+          flex-shrink: 0;
+          transition: background 0.15s;
+        }
+        .resize-handle:hover,
+        .resize-handle.active {
+          background: #4a90d9;
         }
 
         pasty-panel {
@@ -54,9 +67,12 @@ class PastyApp extends HTMLElement {
       </style>
       <div class="app-layout">
         <pasty-canvas></pasty-canvas>
+        <div class="resize-handle"></div>
         <pasty-panel></pasty-panel>
       </div>
     `;
+
+    this._initResizeHandle();
   }
 
   async connectedCallback() {
@@ -68,6 +84,45 @@ class PastyApp extends HTMLElement {
 
     // Install global keyboard dispatcher
     this._initKeyboard();
+  }
+
+  // -------------------------------------------------------------------------
+  // Resizable panel handle
+  // -------------------------------------------------------------------------
+
+  _initResizeHandle() {
+    const handle = this.shadowRoot.querySelector('.resize-handle');
+    const panel = this.shadowRoot.querySelector('pasty-panel');
+    const canvas = this.shadowRoot.querySelector('pasty-canvas');
+    let isResizing = false;
+
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isResizing = true;
+      handle.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      // Panel width = distance from right edge of viewport to mouse X
+      const newWidth = Math.max(200, Math.min(600, window.innerWidth - e.clientX));
+      panel.style.width = `${newWidth}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!isResizing) return;
+      isResizing = false;
+      handle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      // Notify canvas to recalculate its viewBox for the new available space
+      if (canvas && canvas._onResize) {
+        canvas._onResize();
+      }
+    });
   }
 
   // -------------------------------------------------------------------------

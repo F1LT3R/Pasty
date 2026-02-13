@@ -39,7 +39,8 @@ class PastyPanel extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._dragLayerId = null;
     this._dropIndex = null;
-    this._lockRatio = false;
+    this._isDraggingSlider = false;
+    this._isDraggingLayer = false;
   }
 
   connectedCallback() {
@@ -98,6 +99,8 @@ class PastyPanel extends HTMLElement {
         .layer-row.selected { background: #1a3a5c; }
         .layer-row.locked { opacity: 0.6; }
         .layer-row.dragging { opacity: 0.4; }
+        .drag-handle { cursor: grab; color: #555; font-size: 14px; line-height: 1; user-select: none; padding: 0 2px; flex-shrink: 0; }
+        .drag-handle:hover { color: #999; }
         .row-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
         .row-bottom { display: flex; align-items: center; gap: 6px; }
         .icon-btn { background: none; border: none; color: #ddd; cursor: pointer; padding: 2px; font-size: 16px; line-height: 1; min-width: 20px; text-align: center; }
@@ -118,12 +121,6 @@ class PastyPanel extends HTMLElement {
           border-radius: 3px; padding: 2px 4px; font-size: 11px; text-align: right;
         }
         .transform-input:focus { outline: 1px solid #4a90d9; border-color: #4a90d9; }
-        .lock-ratio-btn {
-          background: none; border: 1px solid #555; color: #888; cursor: pointer;
-          padding: 1px 5px; border-radius: 3px; font-size: 12px; line-height: 1;
-        }
-        .lock-ratio-btn:hover { color: #ddd; border-color: #777; }
-        .lock-ratio-btn.active { color: #4a90d9; border-color: #4a90d9; }
       </style>
       <div class="panel-header">
         <span>Layers</span>
@@ -181,15 +178,21 @@ class PastyPanel extends HTMLElement {
         e.dataTransfer.dropEffect = 'move';
         if (this._dropIndex !== 0) {
           this._dropIndex = 0;
-          this.renderPanel();
+          this._updateDropIndicator();
         }
       }
     });
   }
 
   _setupStateListeners() {
-    this._stateChangedHandler = () => this.renderPanel();
-    this._layerSelectedHandler = () => this.renderPanel();
+    this._stateChangedHandler = () => {
+      if (this._isDraggingSlider || this._isDraggingLayer) return;
+      this.renderPanel();
+    };
+    this._layerSelectedHandler = () => {
+      if (this._isDraggingSlider || this._isDraggingLayer) return;
+      this.renderPanel();
+    };
     on('state-changed', this._stateChangedHandler);
     on('layer-selected', this._layerSelectedHandler);
   }
@@ -222,24 +225,49 @@ class PastyPanel extends HTMLElement {
       if (layer.id === selectedId) row.classList.add('selected');
       if (layer.locked) row.classList.add('locked');
       if (layer.id === this._dragLayerId) row.classList.add('dragging');
-      row.draggable = true;
       row.dataset.layerId = layer.id;
 
       // Row click -> select
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.icon-btn') || e.target.closest('.blend-select') || e.target.closest('.opacity-slider') || e.target.closest('.layer-name') || e.target.closest('.transform-input') || e.target.closest('.lock-ratio-btn')) return;
+        if (e.target.closest('.icon-btn') || e.target.closest('.blend-select') || e.target.closest('.opacity-slider') || e.target.closest('.layer-name') || e.target.closest('.transform-input')) return;
         selectLayer(layer.id);
       });
 
-      // Drag handlers
-      row.addEventListener('dragstart', (e) => this._onDragStart(e, layer.id));
+      // Drag handlers — only initiate drag from the grip handle
+      let dragFromHandle = false;
+      row.addEventListener('dragstart', (e) => {
+        if (!dragFromHandle) {
+          e.preventDefault();
+          return;
+        }
+        this._onDragStart(e, layer.id);
+      });
       row.addEventListener('dragover', (e) => this._onDragOver(e, row, arrayIdx));
       row.addEventListener('drop', (e) => this._onDrop(e));
-      row.addEventListener('dragend', () => this._onDragEnd());
+      row.addEventListener('dragend', () => {
+        dragFromHandle = false;
+        row.draggable = false;
+        this._onDragEnd();
+      });
 
       // Row top
       const rowTop = document.createElement('div');
       rowTop.className = 'row-top';
+
+      // Drag handle (grip icon) — only this element enables row dragging
+      const dragHandle = document.createElement('span');
+      dragHandle.className = 'drag-handle';
+      dragHandle.innerHTML = '⠿';
+      dragHandle.title = 'Drag to reorder';
+      dragHandle.addEventListener('mousedown', () => {
+        dragFromHandle = true;
+        row.draggable = true;
+      });
+      document.addEventListener('mouseup', () => {
+        dragFromHandle = false;
+        row.draggable = false;
+      }, { once: false });
+      rowTop.appendChild(dragHandle);
 
       // Eye (visibility)
       const eyeBtn = document.createElement('button');
@@ -338,27 +366,11 @@ class PastyPanel extends HTMLElement {
         wInput.addEventListener('change', (e) => {
           e.stopPropagation();
           const newW = Math.max(1, Number(wInput.value));
-          const props = { width: newW };
-          if (this._lockRatio && layer.width > 0) {
-            props.height = Math.round(layer.height * (newW / layer.width));
-          }
           pushUndo();
-          updateLayer(layer.id, props);
+          updateLayer(layer.id, { width: newW });
           saveState();
         });
         rowTransform.appendChild(wInput);
-
-        // Lock ratio toggle
-        const lockBtn = document.createElement('button');
-        lockBtn.className = 'lock-ratio-btn' + (this._lockRatio ? ' active' : '');
-        lockBtn.innerHTML = this._lockRatio ? '🔗' : '⛓️‍💥';
-        lockBtn.title = this._lockRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio';
-        lockBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          this._lockRatio = !this._lockRatio;
-          this.renderPanel();
-        });
-        rowTransform.appendChild(lockBtn);
 
         // Height
         const hLabel = document.createElement('span');
@@ -374,12 +386,8 @@ class PastyPanel extends HTMLElement {
         hInput.addEventListener('change', (e) => {
           e.stopPropagation();
           const newH = Math.max(1, Number(hInput.value));
-          const props = { height: newH };
-          if (this._lockRatio && layer.height > 0) {
-            props.width = Math.round(layer.width * (newH / layer.height));
-          }
           pushUndo();
-          updateLayer(layer.id, props);
+          updateLayer(layer.id, { height: newH });
           saveState();
         });
         rowTransform.appendChild(hInput);
@@ -427,14 +435,29 @@ class PastyPanel extends HTMLElement {
       opacityLabel.className = 'opacity-label';
       opacityLabel.textContent = `${Math.round(layer.opacity * 100)}%`;
 
-      // Live preview: only update label text locally (no state dispatch = no re-render)
+      // Suppress re-renders while slider is being dragged
+      opacitySlider.addEventListener('pointerdown', () => {
+        this._isDraggingSlider = true;
+      });
+      const endSliderDrag = () => {
+        this._isDraggingSlider = false;
+      };
+      opacitySlider.addEventListener('pointerup', endSliderDrag);
+      opacitySlider.addEventListener('pointercancel', endSliderDrag);
+      // Also listen on document in case pointer is released outside the slider
+      opacitySlider.addEventListener('lostpointercapture', endSliderDrag);
+
+      // Live preview: update label and layer opacity in real time (canvas renders via state-changed)
       opacitySlider.addEventListener('input', (e) => {
         e.stopPropagation();
         opacityLabel.textContent = `${opacitySlider.value}%`;
+        // Update opacity live on canvas — no undo push, no save, just visual feedback
+        updateLayer(layer.id, { opacity: Number(opacitySlider.value) / 100 });
       });
       // Commit on release: push undo, update state, save
       opacitySlider.addEventListener('change', (e) => {
         e.stopPropagation();
+        this._isDraggingSlider = false;
         const val = Number(opacitySlider.value) / 100;
         pushUndo();
         updateLayer(layer.id, { opacity: val });
@@ -472,10 +495,12 @@ class PastyPanel extends HTMLElement {
 
   _onDragStart(e, layerId) {
     this._dragLayerId = layerId;
+    this._isDraggingLayer = true;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', layerId);
-    e.dataTransfer.setDragImage(e.target, 0, 0);
-    this.renderPanel();
+    // Apply dragging style without rebuilding DOM
+    const row = e.target.closest('.layer-row');
+    if (row) row.classList.add('dragging');
   }
 
   _onDragOver(e, row, arrayIdx) {
@@ -502,7 +527,8 @@ class PastyPanel extends HTMLElement {
 
     if (this._dropIndex !== newIdx) {
       this._dropIndex = newIdx;
-      this.renderPanel();
+      // Update drop indicator without full rebuild
+      this._updateDropIndicator();
     }
   }
 
@@ -517,13 +543,42 @@ class PastyPanel extends HTMLElement {
     }
     this._dragLayerId = null;
     this._dropIndex = null;
+    this._isDraggingLayer = false;
     this.renderPanel();
   }
 
   _onDragEnd() {
     this._dragLayerId = null;
     this._dropIndex = null;
+    this._isDraggingLayer = false;
     this.renderPanel();
+  }
+
+  /** Lightweight update: show/move drop indicator without rebuilding the layer list */
+  _updateDropIndicator() {
+    // Remove existing indicators
+    this._layerList.querySelectorAll('.drop-indicator').forEach((el) => el.remove());
+
+    if (this._dropIndex === null || this._dragLayerId === null) return;
+
+    const layers = getLayers();
+    const n = layers.length;
+    const rows = this._layerList.querySelectorAll('.layer-row');
+
+    const indicator = document.createElement('div');
+    indicator.className = 'drop-indicator';
+
+    if (this._dropIndex === 0 && n > 0) {
+      // Drop at the very bottom
+      this._layerList.appendChild(indicator);
+    } else {
+      // Find the row that corresponds to this arrayIdx
+      // Panel is reversed: displayIdx = n - 1 - arrayIdx
+      const displayIdx = n - 1 - this._dropIndex;
+      if (displayIdx >= 0 && displayIdx < rows.length) {
+        rows[displayIdx].before(indicator);
+      }
+    }
   }
 }
 
