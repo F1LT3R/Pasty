@@ -39,6 +39,7 @@ class PastyPanel extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._dragLayerId = null;
     this._dropIndex = null;
+    this._lockRatio = false;
   }
 
   connectedCallback() {
@@ -61,7 +62,36 @@ class PastyPanel extends HTMLElement {
           font-family: system-ui, sans-serif; font-size: 12px;
           border-left: 1px solid #333;
         }
-        .panel-header { padding: 12px; font-size: 14px; font-weight: 600; border-bottom: 1px solid #333; flex-shrink: 0; }
+        .panel-header { padding: 12px; font-size: 14px; font-weight: 600; border-bottom: 1px solid #333; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
+        .help-btn {
+          background: none; border: 1px solid #555; color: #888; cursor: pointer;
+          width: 22px; height: 22px; border-radius: 50%; font-size: 12px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center; padding: 0;
+        }
+        .help-btn:hover { color: #fff; border-color: #888; }
+        .help-modal-backdrop {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .help-modal-box {
+          background: #2a2a2a; color: #ddd; border-radius: 8px; padding: 20px;
+          max-width: 520px; width: 90vw; max-height: 80vh; overflow-y: auto;
+        }
+        .help-modal-box h3 { font-size: 16px; font-weight: 600; margin: 0 0 12px 0; }
+        .help-modal-box table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .help-modal-box th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #444; color: #888; font-weight: 600; }
+        .help-modal-box td { padding: 5px 8px; border-bottom: 1px solid #333; }
+        .help-modal-box td:first-child { white-space: nowrap; }
+        .help-modal-box kbd {
+          background: #444; border: 1px solid #555; border-radius: 3px;
+          padding: 1px 5px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px;
+        }
+        .help-close-btn {
+          margin-top: 12px; padding: 6px 16px; background: #444; color: #ddd;
+          border: none; border-radius: 4px; cursor: pointer; font-size: 12px; float: right;
+        }
+        .help-close-btn:hover { background: #555; }
+        .help-hidden { display: none; }
         .layer-list { flex: 1; overflow-y: auto; }
         .layer-row { padding: 8px; border-bottom: 1px solid #2a2a2a; cursor: pointer; transition: background 0.1s; }
         .layer-row:hover { background: #2a2a2a; }
@@ -81,11 +111,68 @@ class PastyPanel extends HTMLElement {
         .opacity-slider { flex: 1; height: 4px; accent-color: #4a90d9; }
         .opacity-label { font-size: 10px; color: #888; min-width: 30px; text-align: right; }
         .drop-indicator { height: 2px; background: #4a90d9; margin: 0 8px; }
+        .row-transform { display: flex; align-items: center; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+        .transform-label { font-size: 10px; color: #888; min-width: 14px; text-align: right; }
+        .transform-input {
+          width: 52px; background: #333; color: #ddd; border: 1px solid #444;
+          border-radius: 3px; padding: 2px 4px; font-size: 11px; text-align: right;
+        }
+        .transform-input:focus { outline: 1px solid #4a90d9; border-color: #4a90d9; }
+        .lock-ratio-btn {
+          background: none; border: 1px solid #555; color: #888; cursor: pointer;
+          padding: 1px 5px; border-radius: 3px; font-size: 12px; line-height: 1;
+        }
+        .lock-ratio-btn:hover { color: #ddd; border-color: #777; }
+        .lock-ratio-btn.active { color: #4a90d9; border-color: #4a90d9; }
       </style>
-      <div class="panel-header">Layers</div>
+      <div class="panel-header">
+        <span>Layers</span>
+        <button class="help-btn" title="Keyboard shortcuts">?</button>
+      </div>
       <div class="layer-list"></div>
       <pasty-export></pasty-export>
+
+      <div class="help-modal-backdrop help-hidden">
+        <div class="help-modal-box">
+          <h3>Keyboard &amp; Mouse Shortcuts</h3>
+          <table>
+            <tr><th>Shortcut</th><th>Action</th></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>V</kbd></td><td>Paste image as new layer</td></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Z</kbd></td><td>Undo</td></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd></td><td>Redo</td></tr>
+            <tr><td><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>0</kbd></td><td>Reset zoom</td></tr>
+            <tr><td><kbd>Arrow keys</kbd></td><td>Nudge layer 1px</td></tr>
+            <tr><td><kbd>Shift</kbd> + <kbd>Arrow keys</kbd></td><td>Nudge layer 10px</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>\u2191</kbd>/<kbd>\u2193</kbd></td><td>Reorder layer z-index</td></tr>
+            <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd></td><td>Delete selected layer</td></tr>
+            <tr><td><kbd>Space</kbd> + drag</td><td>Pan canvas</td></tr>
+            <tr><td>Scroll wheel</td><td>Zoom in/out</td></tr>
+            <tr><td><kbd>Alt</kbd> + drag</td><td>Scale width (horiz) / height (vert)</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>Shift</kbd> + drag</td><td>Scale proportionally</td></tr>
+            <tr><td><kbd>Alt</kbd> + <kbd>R</kbd> + drag</td><td>Rotate layer</td></tr>
+            <tr><td>Double-click layer name</td><td>Rename layer</td></tr>
+          </table>
+          <button class="help-close-btn">Close</button>
+        </div>
+      </div>
     `;
+
+    // Help modal handlers
+    const helpModal = this.shadowRoot.querySelector('.help-modal-backdrop');
+    this.shadowRoot.querySelector('.help-btn').addEventListener('click', () => {
+      helpModal.classList.remove('help-hidden');
+    });
+    this.shadowRoot.querySelector('.help-close-btn').addEventListener('click', () => {
+      helpModal.classList.add('help-hidden');
+    });
+    helpModal.addEventListener('click', (e) => {
+      if (e.target === helpModal) helpModal.classList.add('help-hidden');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !helpModal.classList.contains('help-hidden')) {
+        helpModal.classList.add('help-hidden');
+      }
+    });
 
     this._layerList = this.shadowRoot.querySelector('.layer-list');
     this._layerList.addEventListener('dragover', (e) => {
@@ -140,7 +227,7 @@ class PastyPanel extends HTMLElement {
 
       // Row click -> select
       row.addEventListener('click', (e) => {
-        if (e.target.closest('.icon-btn') || e.target.closest('.blend-select') || e.target.closest('.opacity-slider') || e.target.closest('.layer-name')) return;
+        if (e.target.closest('.icon-btn') || e.target.closest('.blend-select') || e.target.closest('.opacity-slider') || e.target.closest('.layer-name') || e.target.closest('.transform-input') || e.target.closest('.lock-ratio-btn')) return;
         selectLayer(layer.id);
       });
 
@@ -232,6 +319,97 @@ class PastyPanel extends HTMLElement {
 
       row.appendChild(rowTop);
 
+      // Transform controls (selected layer only)
+      if (layer.id === selectedId) {
+        const rowTransform = document.createElement('div');
+        rowTransform.className = 'row-transform';
+
+        // Width
+        const wLabel = document.createElement('span');
+        wLabel.className = 'transform-label';
+        wLabel.textContent = 'W';
+        rowTransform.appendChild(wLabel);
+
+        const wInput = document.createElement('input');
+        wInput.type = 'number';
+        wInput.className = 'transform-input';
+        wInput.value = String(Math.round(layer.width));
+        wInput.min = '1';
+        wInput.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const newW = Math.max(1, Number(wInput.value));
+          const props = { width: newW };
+          if (this._lockRatio && layer.width > 0) {
+            props.height = Math.round(layer.height * (newW / layer.width));
+          }
+          pushUndo();
+          updateLayer(layer.id, props);
+          saveState();
+        });
+        rowTransform.appendChild(wInput);
+
+        // Lock ratio toggle
+        const lockBtn = document.createElement('button');
+        lockBtn.className = 'lock-ratio-btn' + (this._lockRatio ? ' active' : '');
+        lockBtn.innerHTML = this._lockRatio ? '🔗' : '⛓️‍💥';
+        lockBtn.title = this._lockRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio';
+        lockBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._lockRatio = !this._lockRatio;
+          this.renderPanel();
+        });
+        rowTransform.appendChild(lockBtn);
+
+        // Height
+        const hLabel = document.createElement('span');
+        hLabel.className = 'transform-label';
+        hLabel.textContent = 'H';
+        rowTransform.appendChild(hLabel);
+
+        const hInput = document.createElement('input');
+        hInput.type = 'number';
+        hInput.className = 'transform-input';
+        hInput.value = String(Math.round(layer.height));
+        hInput.min = '1';
+        hInput.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const newH = Math.max(1, Number(hInput.value));
+          const props = { height: newH };
+          if (this._lockRatio && layer.height > 0) {
+            props.width = Math.round(layer.width * (newH / layer.height));
+          }
+          pushUndo();
+          updateLayer(layer.id, props);
+          saveState();
+        });
+        rowTransform.appendChild(hInput);
+
+        // Rotation
+        const rLabel = document.createElement('span');
+        rLabel.className = 'transform-label';
+        rLabel.textContent = 'R';
+        rowTransform.appendChild(rLabel);
+
+        const rInput = document.createElement('input');
+        rInput.type = 'number';
+        rInput.className = 'transform-input';
+        rInput.value = String(Math.round(layer.rotation || 0));
+        rInput.addEventListener('change', (e) => {
+          e.stopPropagation();
+          pushUndo();
+          updateLayer(layer.id, { rotation: Number(rInput.value) % 360 });
+          saveState();
+        });
+        rowTransform.appendChild(rInput);
+
+        const degLabel = document.createElement('span');
+        degLabel.className = 'transform-label';
+        degLabel.textContent = '\u00B0';
+        rowTransform.appendChild(degLabel);
+
+        row.appendChild(rowTransform);
+      }
+
       // Row bottom
       const rowBottom = document.createElement('div');
       rowBottom.className = 'row-bottom';
@@ -243,24 +421,26 @@ class PastyPanel extends HTMLElement {
       opacitySlider.min = '0';
       opacitySlider.max = '100';
       opacitySlider.value = String(Math.round(layer.opacity * 100));
-      opacitySlider.addEventListener('input', (e) => {
-        e.stopPropagation();
-        const val = Number(opacitySlider.value) / 100;
-        updateLayer(layer.id, { opacity: val });
-      });
-      opacitySlider.addEventListener('change', () => {
-        pushUndo();
-        saveState();
-      });
-      rowBottom.appendChild(opacitySlider);
 
       // Opacity label
       const opacityLabel = document.createElement('span');
       opacityLabel.className = 'opacity-label';
       opacityLabel.textContent = `${Math.round(layer.opacity * 100)}%`;
-      opacitySlider.addEventListener('input', () => {
+
+      // Live preview: only update label text locally (no state dispatch = no re-render)
+      opacitySlider.addEventListener('input', (e) => {
+        e.stopPropagation();
         opacityLabel.textContent = `${opacitySlider.value}%`;
       });
+      // Commit on release: push undo, update state, save
+      opacitySlider.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const val = Number(opacitySlider.value) / 100;
+        pushUndo();
+        updateLayer(layer.id, { opacity: val });
+        saveState();
+      });
+      rowBottom.appendChild(opacitySlider);
       rowBottom.appendChild(opacityLabel);
 
       // Delete

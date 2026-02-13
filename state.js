@@ -9,7 +9,7 @@
 // Internal state (private)
 // ---------------------------------------------------------------------------
 
-/** @type {Array<{id:string, name:string, imageId:string, x:number, y:number, width:number, height:number, opacity:number, visible:boolean, locked:boolean, blendMode:string}>} */
+/** @type {Array<{id:string, name:string, imageId:string, x:number, y:number, width:number, height:number, rotation:number, opacity:number, visible:boolean, locked:boolean, blendMode:string}>} */
 let _layers = [];
 
 /** @type {{x:number, y:number, w:number, h:number}} */
@@ -228,6 +228,7 @@ export function getInitialDimensions() {
  * @param {object} layerObj
  */
 export function addLayer(layerObj) {
+  if (layerObj.rotation === undefined) layerObj.rotation = 0;
   _layers.push(layerObj);
   dispatch('state-changed');
 }

@@ -34,6 +34,16 @@ class PastyCanvas extends HTMLElement {
     this._panStartY = 0;
     this._viewBoxStart = null;
     this._resizeTimeout = null;
+
+    // Transform mode state (Alt+drag scale, Alt+R rotate)
+    this._transformMode = null;  // 'scale' | 'scale-locked' | 'rotate' | null
+    this._transformLayerId = null;
+    this._transformStartX = 0;
+    this._transformStartY = 0;
+    this._layerStartW = 0;
+    this._layerStartH = 0;
+    this._layerStartRot = 0;
+    this._rKeyDown = false;
   }
 
   get svgElement() {
@@ -79,7 +89,8 @@ class PastyCanvas extends HTMLElement {
         svg { display: block; width: 100%; height: 100%; }
         .paste-hint {
           position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-          color: #999; font-size: 18px; pointer-events: none; text-align: center;
+          color: #e33; font-size: 18px; font-weight: 600; pointer-events: none; text-align: center;
+          text-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
         .zoom-controls {
           position: absolute; bottom: 12px; left: 12px;
@@ -173,6 +184,14 @@ class PastyCanvas extends HTMLElement {
       g.style.mixBlendMode = layer.blendMode || 'normal';
       g.style.display = layer.visible ? '' : 'none';
       if (layer.locked) g.style.pointerEvents = 'none';
+
+      // Apply rotation around the layer's center
+      const rot = layer.rotation || 0;
+      if (rot !== 0) {
+        const cx = layer.x + layer.width / 2;
+        const cy = layer.y + layer.height / 2;
+        g.setAttribute('transform', `rotate(${rot}, ${cx}, ${cy})`);
+      }
 
       const img = document.createElementNS(SVG_NS, 'image');
       const dataUrl = getImageSync(layer.imageId);
@@ -300,16 +319,42 @@ class PastyCanvas extends HTMLElement {
     const layer = getLayers().find((l) => l.id === layerId);
     if (layer?.locked) return;
 
+    selectLayer(layerId);
+
+    // Alt held = transform mode (scale or rotate)
+    if (e.altKey) {
+      e.preventDefault();
+      this._transformLayerId = layerId;
+      this._transformStartX = e.clientX;
+      this._transformStartY = e.clientY;
+      this._layerStartW = layer.width;
+      this._layerStartH = layer.height;
+      this._layerStartRot = layer.rotation || 0;
+
+      if (this._rKeyDown) {
+        this._transformMode = 'rotate';
+        this.style.cursor = 'crosshair';
+      } else if (e.shiftKey) {
+        this._transformMode = 'scale-locked';
+        this.style.cursor = 'nesw-resize';
+      } else {
+        this._transformMode = 'scale';
+        this.style.cursor = 'ew-resize';
+      }
+      return;
+    }
+
+    // Normal drag (move)
     const pt = this._clientToSvg(e.clientX, e.clientY);
     this._dragLayerId = layerId;
     this._dragStartX = pt.x;
     this._dragStartY = pt.y;
     this._layerStartX = layer.x;
     this._layerStartY = layer.y;
-    selectLayer(layerId);
   }
 
   _onMouseMove(e) {
+    // Pan mode (space + drag)
     if (this._spaceDown && (e.buttons & 1)) {
       if (!this._isPanning) {
         this._isPanning = true;
@@ -324,6 +369,39 @@ class PastyCanvas extends HTMLElement {
       this.renderSVG();
       return;
     }
+
+    // Transform mode (Alt+drag scale or Alt+R rotate)
+    if (this._transformMode && this._transformLayerId) {
+      const dxPx = e.clientX - this._transformStartX;
+      const dyPx = e.clientY - this._transformStartY;
+
+      if (this._transformMode === 'scale') {
+        // Horizontal delta scales width, vertical delta scales height
+        const newW = Math.max(10, this._layerStartW + dxPx);
+        const newH = Math.max(10, this._layerStartH + dyPx);
+        updateLayer(this._transformLayerId, { width: newW, height: newH });
+      } else if (this._transformMode === 'scale-locked') {
+        // Horizontal delta scales both axes proportionally
+        const ratio = this._layerStartH / this._layerStartW;
+        const newW = Math.max(10, this._layerStartW + dxPx);
+        const newH = Math.max(10, Math.round(newW * ratio));
+        updateLayer(this._transformLayerId, { width: newW, height: newH });
+      } else if (this._transformMode === 'rotate') {
+        // Compute angle from layer center to mouse position
+        const layer = getLayers().find((l) => l.id === this._transformLayerId);
+        if (layer) {
+          const svgPt = this._clientToSvg(e.clientX, e.clientY);
+          const cx = layer.x + layer.width / 2;
+          const cy = layer.y + layer.height / 2;
+          const angle = Math.atan2(svgPt.y - cy, svgPt.x - cx) * (180 / Math.PI);
+          updateLayer(this._transformLayerId, { rotation: Math.round(angle) });
+        }
+      }
+      this.renderSVG();
+      return;
+    }
+
+    // Normal drag (move layer)
     if (this._dragLayerId) {
       const pt = this._clientToSvg(e.clientX, e.clientY);
       const dx = pt.x - this._dragStartX;
@@ -341,6 +419,16 @@ class PastyCanvas extends HTMLElement {
       this._isPanning = false;
       return;
     }
+    // End transform mode
+    if (this._transformMode && this._transformLayerId) {
+      pushUndo();
+      saveState();
+      this._transformMode = null;
+      this._transformLayerId = null;
+      this.style.cursor = '';
+      return;
+    }
+    // End normal drag
     if (this._dragLayerId) {
       pushUndo();
       saveState();
@@ -354,6 +442,9 @@ class PastyCanvas extends HTMLElement {
       this._spaceDown = true;
       this.style.cursor = 'grab';
     }
+    if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
+      this._rKeyDown = true;
+    }
   }
 
   _onKeyUp(e) {
@@ -362,6 +453,9 @@ class PastyCanvas extends HTMLElement {
       this._spaceDown = false;
       this._isPanning = false;
       this.style.cursor = '';
+    }
+    if (e.code === 'KeyR') {
+      this._rKeyDown = false;
     }
   }
 
