@@ -117,6 +117,23 @@ class PastyExport extends HTMLElement {
     });
   }
 
+  /** Find <pasty-canvas> by traversing up through shadow DOM boundaries */
+  _getCanvas() {
+    // Walk up from this element through shadow roots to find the app shell
+    let node = this.getRootNode();
+    while (node) {
+      const canvas = node.querySelector?.('pasty-canvas');
+      if (canvas) return canvas;
+      // Move up: if we're in a shadow root, get the host and try its root
+      if (node instanceof ShadowRoot) {
+        node = node.host.getRootNode();
+      } else {
+        break;
+      }
+    }
+    return null;
+  }
+
   _onExportClick() {
     const svgChecked = this.shadowRoot.querySelector('.export-svg').checked;
     const pngChecked = this.shadowRoot.querySelector('.export-png').checked;
@@ -125,7 +142,7 @@ class PastyExport extends HTMLElement {
   }
 
   exportSVG() {
-    const canvas = document.querySelector('pasty-canvas');
+    const canvas = this._getCanvas();
     const svg = canvas?.svgElement;
     if (!svg) return;
 
@@ -139,7 +156,7 @@ class PastyExport extends HTMLElement {
   }
 
   exportPNG() {
-    const canvas = document.querySelector('pasty-canvas');
+    const canvas = this._getCanvas();
     const svg = canvas?.svgElement;
     if (!svg) return;
 
