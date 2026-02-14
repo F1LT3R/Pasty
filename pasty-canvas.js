@@ -89,8 +89,17 @@ class PastyCanvas extends HTMLElement {
         svg { display: block; width: 100%; height: 100%; }
         .paste-hint {
           position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-          color: #e33; font-size: 18px; font-weight: 600; pointer-events: none; text-align: center;
-          text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+          color:rgb(240, 64, 20); font-size: 18px; font-weight: 600; pointer-events: none; text-align: center;
+          text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+          display: flex; flex-direction: column; align-items: center; gap: 16px;
+        }
+        .paste-hint img.logo {
+          width: 320px; height: auto;
+          border: 4px solid #e85d3a;
+          border-radius: 12px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.5), 0 8px 40px rgba(0,0,0,0.3);
+          background: #2d2d2d;
+          padding: 12px 20px;
         }
         .zoom-controls {
           position: absolute; bottom: 12px; left: 12px;
@@ -107,7 +116,10 @@ class PastyCanvas extends HTMLElement {
       <div class="canvas-wrapper">
         <svg xmlns="${SVG_NS}"></svg>
       </div>
-      <div class="paste-hint">Paste an image (Ctrl+V) or drag & drop a file to get started</div>
+      <div class="paste-hint">
+        <img class="logo" src="pasty-logo.png" alt="Pasty">
+        <span>Paste an image (Ctrl+V) or drag &amp; drop a file to get started</span>
+      </div>
       <div class="zoom-controls">
         <span class="zoom-level">100%</span>
         <button class="fit-zoom">Fit</button>
@@ -226,7 +238,7 @@ class PastyCanvas extends HTMLElement {
 
     // Show/hide paste hint
     const pasteHint = this.shadowRoot.querySelector('.paste-hint');
-    pasteHint.style.display = layers.length === 0 ? 'block' : 'none';
+    pasteHint.style.display = layers.length === 0 ? 'flex' : 'none';
 
     // Update zoom text
     const zoomEl = this.shadowRoot.querySelector('.zoom-level');

@@ -3,6 +3,7 @@ import {
   getViewBox,
   exportProject,
   importProject,
+  clearAll,
   saveState,
   dispatch,
 } from './state.js';
@@ -34,6 +35,8 @@ class PastyExport extends HTMLElement {
         .btn-primary:hover { background: #4a8be5; }
         .btn-secondary { background: #444; color: #ddd; }
         .btn-secondary:hover { background: #555; }
+        .btn-danger { background: #a33; color: white; }
+        .btn-danger:hover { background: #c44; }
         .btn-row { display: flex; gap: 6px; }
         .btn-row .btn { flex: 1; }
 
@@ -70,6 +73,7 @@ class PastyExport extends HTMLElement {
       <div class="btn-row">
         <button class="btn btn-secondary save-project-btn">Save</button>
         <button class="btn btn-secondary load-project-btn">Load</button>
+        <button class="btn btn-danger clear-project-btn">Clear</button>
       </div>
 
       <!-- Save Modal (hidden by default) -->
@@ -95,6 +99,22 @@ class PastyExport extends HTMLElement {
           </div>
         </div>
       </div>
+
+      <!-- Clear Confirmation Modal (hidden by default) -->
+      <div class="modal-backdrop clear-modal hidden">
+        <div class="modal-box" style="max-width: 420px;">
+          <h3 class="modal-title">Clear Project</h3>
+          <p style="color: #ccc; font-size: 13px; line-height: 1.5; margin: 0;">
+            This will permanently delete all layers, images, and undo history.
+            <br><br>
+            If you want to keep your work, click <strong>Cancel</strong> and use the <strong>Save</strong> button first.
+          </p>
+          <div class="modal-actions">
+            <button class="btn btn-danger clear-confirm-btn">Clear Everything</button>
+            <button class="btn btn-secondary close-clear-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -104,16 +124,22 @@ class PastyExport extends HTMLElement {
     root.querySelector('.export-btn').addEventListener('click', () => this._onExportClick());
     root.querySelector('.save-project-btn').addEventListener('click', () => this._onSaveProjectClick());
     root.querySelector('.load-project-btn').addEventListener('click', () => this._onLoadProjectClick());
+    root.querySelector('.clear-project-btn').addEventListener('click', () => this._onClearProjectClick());
     root.querySelector('.copy-btn').addEventListener('click', () => this._onCopyClick());
     root.querySelector('.close-save-btn').addEventListener('click', () => this._closeSaveModal());
     root.querySelector('.load-confirm-btn').addEventListener('click', () => this._onLoadConfirmClick());
     root.querySelector('.close-load-btn').addEventListener('click', () => this._closeLoadModal());
+    root.querySelector('.clear-confirm-btn').addEventListener('click', () => this._onClearConfirmClick());
+    root.querySelector('.close-clear-btn').addEventListener('click', () => this._closeClearModal());
 
     root.querySelector('.save-modal').addEventListener('click', (e) => {
       if (e.target.classList.contains('modal-backdrop')) this._closeSaveModal();
     });
     root.querySelector('.load-modal').addEventListener('click', (e) => {
       if (e.target.classList.contains('modal-backdrop')) this._closeLoadModal();
+    });
+    root.querySelector('.clear-modal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-backdrop')) this._closeClearModal();
     });
   }
 
@@ -233,6 +259,19 @@ class PastyExport extends HTMLElement {
 
   _closeLoadModal() {
     this.shadowRoot.querySelector('.load-modal').classList.add('hidden');
+  }
+
+  _onClearProjectClick() {
+    this.shadowRoot.querySelector('.clear-modal').classList.remove('hidden');
+  }
+
+  async _onClearConfirmClick() {
+    await clearAll();
+    this._closeClearModal();
+  }
+
+  _closeClearModal() {
+    this.shadowRoot.querySelector('.clear-modal').classList.add('hidden');
   }
 }
 

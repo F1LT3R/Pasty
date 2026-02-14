@@ -185,6 +185,35 @@ export async function collectGarbageImages() {
   }
 }
 
+/**
+ * Clear all state: layers, undo/redo stacks, selection, images, and localStorage.
+ */
+export async function clearAll() {
+  _layers = [];
+  _selectedLayerId = null;
+  _undoStack = [];
+  _redoStack = [];
+  _imageCache.clear();
+
+  // Wipe all images from IndexedDB
+  try {
+    const db = await openDB();
+    const tx = db.transaction('images', 'readwrite');
+    tx.objectStore('images').clear();
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (_) {
+    // IndexedDB unavailable — ignore
+  }
+
+  // Clear localStorage
+  localStorage.removeItem('pasty-state');
+
+  dispatch('state-changed');
+}
+
 // ---------------------------------------------------------------------------
 // Accessors (read-only snapshots)
 // ---------------------------------------------------------------------------

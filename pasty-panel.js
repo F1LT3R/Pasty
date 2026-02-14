@@ -99,8 +99,8 @@ class PastyPanel extends HTMLElement {
         .layer-row.selected { background: #1a3a5c; }
         .layer-row.locked { opacity: 0.6; }
         .layer-row.dragging { opacity: 0.4; }
-        .drag-handle { cursor: grab; color: #555; font-size: 14px; line-height: 1; user-select: none; padding: 0 2px; flex-shrink: 0; }
-        .drag-handle:hover { color: #999; }
+        .drag-handle { cursor: grab; color: #e85d3a; font-size: 18px; line-height: 1; user-select: none; padding: 2px 4px; flex-shrink: 0; }
+        .drag-handle:hover { color: #ff6f4a; }
         .row-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
         .row-bottom { display: flex; align-items: center; gap: 6px; }
         .icon-btn { background: none; border: none; color: #ddd; cursor: pointer; padding: 2px; font-size: 16px; line-height: 1; min-width: 20px; text-align: center; }
@@ -113,7 +113,7 @@ class PastyPanel extends HTMLElement {
         .blend-select { background: #333; color: #ddd; border: 1px solid #444; border-radius: 3px; padding: 2px 4px; font-size: 11px; max-width: 90px; }
         .opacity-slider { flex: 1; height: 4px; accent-color: #4a90d9; }
         .opacity-label { font-size: 10px; color: #888; min-width: 30px; text-align: right; }
-        .drop-indicator { height: 2px; background: #4a90d9; margin: 0 8px; }
+        .drop-indicator { height: 3px; background: #e85d3a; margin: 0 8px; border-radius: 1px; }
         .row-transform { display: flex; align-items: center; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
         .transform-label { font-size: 10px; color: #888; min-width: 14px; text-align: right; }
         .transform-input {
