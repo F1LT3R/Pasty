@@ -9,6 +9,10 @@
   Paste images, stack layers, blend, transform, and export — no server required.
 </p>
 
+<p align="center">
+  <a href="https://f1lt3r.github.io/Pasty/"><b>🥟 Try Pasty Now — Live Demo on GitHub Pages</b></a>
+</p>
+
 ---
 
 ## Overview
